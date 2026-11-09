@@ -1,10 +1,18 @@
-# TypeEffects
+# FunWithFonts
 
 Three small browser demos that animate how text appears on screen: a top-down
 wipe, a self-drawing outline, and a spray-paint effect with overspray and drips.
 
+## Live demos
+
+- [All demos](https://drsjb80.github.io/FunWithFonts/)
+- [Top-down wipe](https://drsjb80.github.io/FunWithFonts/wipe.html)
+- [Stroke trace](https://drsjb80.github.io/FunWithFonts/trace.html)
+- [Spray paint](https://drsjb80.github.io/FunWithFonts/spray.html)
+
 Each demo is one self-contained HTML file. There is no build step and nothing
-to install. Open a file in any browser on macOS, Linux, or Windows.
+to install. Open a file in any browser on macOS, Linux, or Windows, or use the
+links above.
 
 | File | Effect | Technique |
 | --- | --- | --- |
