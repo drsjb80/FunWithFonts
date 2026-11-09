@@ -34,9 +34,17 @@
   @media (prefers-reduced-motion: reduce) {
     .word.run { animation-duration: 1ms; }
   }
+
+  .back {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    color: #2346d8;
+  }
 </style>
 </head>
 <body>
+  <a class="back" href="./">&larr; All demos</a>
   <div>
     <div class="word" id="word">FRESH</div>
     <button type="button" id="replay">Replay</button>
