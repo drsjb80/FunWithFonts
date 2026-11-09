@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spray Paint</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&display=swap">
+<style>
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    background: #f4f5f7;
+    font-family: system-ui, sans-serif;
+  }
+
+  canvas {
+    width: min(90vw, 900px);
+    height: 300px;
+  }
+</style>
+</head>
+<body>
+  <div>
+    <canvas id="wall" aria-label="Spray-painted word"></canvas>
+    <button type="button" id="replay">Replay</button>
+  </div>
+
+<script>
+  "use strict";
+
+  const WORD = "FRESH";
+  const FONT = "Bungee";
+  const PAINT = "#2346d8";
+
+  const canvas = document.getElementById("wall");
+  const ctx = canvas.getContext("2d");
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let frameRequest = null;
+
+  // Box-Muller transform: two uniform randoms become one normally distributed value.
+  function gaussian() {
+    let u = 0;
+    while (u === 0) u = Math.random();
+    const v = Math.random();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+
+  // Draw the word once to a hidden canvas and keep its alpha channel as a stencil.
+  function buildStencil(fontSize, width, height) {
+    const hidden = document.createElement("canvas");
+    hidden.width = Math.ceil(width);
+    hidden.height = Math.ceil(height);
+    const hiddenCtx = hidden.getContext("2d", { willReadFrequently: true });
+    hiddenCtx.font = `${fontSize}px "${FONT}"`;
+    hiddenCtx.textAlign = "center";
+
+    const metrics = hiddenCtx.measureText(WORD);
+    const ascent = metrics.actualBoundingBoxAscent;
+    const descent = metrics.actualBoundingBoxDescent;
+    const baseline = height / 2 + (ascent - descent) / 2;
+    hiddenCtx.fillText(WORD, width / 2, baseline);
+
+    const pixels = hiddenCtx.getImageData(0, 0, hidden.width, hidden.height).data;
+
+    function isInside(x, y) {
+      const col = Math.floor(x);
+      const row = Math.floor(y);
+      if (col < 0 || row < 0 || col >= hidden.width || row >= hidden.height) return false;
+      return pixels[(row * hidden.width + col) * 4 + 3] > 127;
+    }
+
+    return {
+      isInside,
+      top: baseline - ascent,
+      bottom: baseline + descent,
+      left: width / 2 - metrics.width / 2,
+      right: width / 2 + metrics.width / 2,
+    };
+  }
+
+  function paintDot(x, y, alpha, radius) {
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function spray() {
+    if (frameRequest !== null) cancelAnimationFrame(frameRequest);
+
+    // Match the canvas buffer to its on-screen size so dots stay crisp.
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = Math.round(width * ratio);
+    canvas.height = Math.round(height * ratio);
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.fillStyle = PAINT;
+    ctx.strokeStyle = PAINT;
+    ctx.lineCap = "round";
+
+    const fontSize = Math.min(height * 0.6, width / (WORD.length * 0.75));
+    const stencil = buildStencil(fontSize, width, height);
+
+    // Tuning values scale with the letter size.
+    const spread = Math.max(2.5, fontSize * 0.045);
+    const rowGap = Math.max(4, fontSize * 0.07);
+    const speed = Math.max(14, fontSize * 0.28);
+    const dotsPerFrame = Math.round(speed * rowGap * 0.45);
+    const margin = spread * 2;
+
+    const nozzle = { x: stencil.left - margin, y: stencil.top - spread, direction: 1, done: false };
+    const drips = [];
+
+    // Paint pools at a letter's bottom edge; occasionally let it run.
+    function maybeStartDrip(x, y) {
+      if (drips.length >= 14 || Math.random() > 0.02) return;
+      if (stencil.isInside(x, y + spread)) return;
+      drips.push({ x, y, grown: 0, length: spread * 2 + Math.random() * fontSize * 0.45, width: 1 + Math.random() * 1.6 });
+    }
+
+    // Fire dots along the stretch the nozzle just covered.
+    function sprayAlong(fromX, toX, y) {
+      for (let i = 0; i < dotsPerFrame; i++) {
+        const x = fromX + (toX - fromX) * Math.random() + gaussian() * spread;
+        const dotY = y + gaussian() * spread;
+        const radius = 0.5 + Math.random() * 1.2;
+        if (stencil.isInside(x, dotY)) {
+          paintDot(x, dotY, 0.5, radius);
+          maybeStartDrip(x, dotY);
+        } else if (Math.random() < 0.04) {
+          paintDot(x, dotY, 0.1, radius); // overspray
+        }
+      }
+    }
+
+    // Sweep back and forth in rows, top to bottom.
+    function moveNozzle() {
+      if (nozzle.done) return;
+      const startX = nozzle.x;
+      nozzle.x += nozzle.direction * speed;
+      sprayAlong(startX, nozzle.x, nozzle.y);
+
+      const pastRight = nozzle.direction === 1 && nozzle.x > stencil.right + margin;
+      const pastLeft = nozzle.direction === -1 && nozzle.x < stencil.left - margin;
+      if (pastRight || pastLeft) {
+        nozzle.direction *= -1;
+        nozzle.y += rowGap;
+        nozzle.done = nozzle.y > stencil.bottom + spread;
+      }
+    }
+
+    // Drips slow as they near full length, like paint running out.
+    function growDrips() {
+      for (let i = drips.length - 1; i >= 0; i--) {
+        const drip = drips[i];
+        const step = Math.max(0.15, 1.4 * (1 - drip.grown / drip.length));
+        const fromY = drip.y + drip.grown;
+        drip.grown += step;
+        ctx.globalAlpha = 0.85;
+        ctx.lineWidth = drip.width;
+        ctx.beginPath();
+        ctx.moveTo(drip.x, fromY);
+        ctx.lineTo(drip.x, drip.y + drip.grown);
+        ctx.stroke();
+        if (drip.grown >= drip.length) {
+          paintDot(drip.x, drip.y + drip.grown, 0.85, drip.width * 1.1);
+          drips.splice(i, 1);
+        }
+      }
+    }
+
+    function finished() {
+      return nozzle.done && drips.length === 0;
+    }
+
+    function frame() {
+      moveNozzle();
+      growDrips();
+      frameRequest = finished() ? null : requestAnimationFrame(frame);
+    }
+
+    if (reducedMotion) {
+      // Show the finished piece at once; the cap guards against an endless loop.
+      for (let i = 0; i < 20000 && !finished(); i++) {
+        moveNozzle();
+        growDrips();
+      }
+    } else {
+      frameRequest = requestAnimationFrame(frame);
+    }
+  }
+
+  document.getElementById("replay").addEventListener("click", spray);
+  // Wait for the web font, or the stencil would use a fallback face.
+  document.fonts.load(`100px "${FONT}"`).finally(spray);
+</script>
+</body>
+</html>

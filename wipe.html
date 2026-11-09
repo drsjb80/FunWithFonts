@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Top-down Wipe</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&display=swap">
+<style>
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    background: #f4f5f7;
+    font-family: system-ui, sans-serif;
+  }
+
+  .word {
+    font: 400 clamp(3rem, 15vw, 10rem) / 1 "Bungee", "Arial Black", sans-serif;
+    color: #2346d8;
+    /* Start fully clipped: the bottom inset is 100%, so nothing shows. */
+    clip-path: inset(0 0 100% 0);
+  }
+
+  /* Slide the bottom edge of the clip down to reveal the text from the top. */
+  .word.run {
+    animation: wipe 1.6s cubic-bezier(0.6, 0, 0.3, 1) forwards;
+  }
+
+  @keyframes wipe {
+    to { clip-path: inset(0 0 0 0); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .word.run { animation-duration: 1ms; }
+  }
+</style>
+</head>
+<body>
+  <div>
+    <div class="word" id="word">FRESH</div>
+    <button type="button" id="replay">Replay</button>
+  </div>
+
+<script>
+  "use strict";
+
+  const word = document.getElementById("word");
+
+  // Removing the class and forcing a reflow lets the animation run again.
+  function replay() {
+    word.classList.remove("run");
+    void word.offsetWidth;
+    word.classList.add("run");
+  }
+
+  document.getElementById("replay").addEventListener("click", replay);
+  document.fonts.load('100px "Bungee"').finally(replay);
+</script>
+</body>
+</html>
